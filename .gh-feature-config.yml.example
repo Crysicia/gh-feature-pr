@@ -1,0 +1,10 @@
+feature-1:
+  label: feature-1
+  reviewers:
+    - Matz
+
+feature-2:
+  label: feature-2
+  reviewers:
+    - Linus
+    - Octocat

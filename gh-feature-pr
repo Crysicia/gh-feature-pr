@@ -1,35 +1,49 @@
-#!/usr/bin/env bash
-set -e
+#!/usr/bin/env ruby
+require "yaml"
 
-echo "Hello gh-feature-pr!"
+class GitHubPRCreator
+  CONFIG_FILE = ".gh-feature-config.yml"
+  DEFAULT_BASE_BRANCH = "staging"
 
-# Snippets to help get started:
+  def initialize
+    @config = load_config
+    @feature_name = feature_name
+    @label = @config.dig(@feature_name, "label")
+    @reviewers = @config.dig(@feature_name, "reviewers")
+  end
 
-# Determine if an executable is in the PATH
-# if ! type -p ruby >/dev/null; then
-#   echo "Ruby not found on the system" >&2
-#   exit 1
-# fi
+  def self.create
+    new.create
+  end
 
-# Pass arguments through to another command
-# gh issue list "$@" -R cli/cli
+  def create
+    exec(*build_pr_command)
+  end
 
-# Using the gh api command to retrieve and format information
-# QUERY='
-#   query($endCursor: String) {
-#     viewer {
-#       repositories(first: 100, after: $endCursor) {
-#         nodes {
-#           nameWithOwner
-#           stargazerCount
-#         }
-#       }
-#     }
-#   }
-# '
-# TEMPLATE='
-#   {{- range $repo := .data.viewer.repositories.nodes -}}
-#     {{- printf "name: %s - stargazers: %v\n" $repo.nameWithOwner $repo.stargazerCount -}}
-#   {{- end -}}
-# '
-# exec gh api graphql -f query="${QUERY}" --paginate --template="${TEMPLATE}"
+  private
+
+  def load_config
+    config_path = File.join(Dir.pwd, CONFIG_FILE)
+    abort("❌ Configuration file #{CONFIG_FILE} not found.") unless File.exist?(config_path)
+
+    YAML.load_file(config_path)
+  end
+
+  def feature_name
+    branch = `git rev-parse --abbrev-ref HEAD`.strip
+    parsed = branch.match(/^(?:conflict[s?]\/)?(?<ticket>[^\/]+)\/(?<feature>[^\/]+)\/(?<title>[^\/]+)$/i)
+
+    abort("❌ Branch name must be in the format '<ticket>/<feature>/<title>' or 'conflicts/<ticket>/<feature>/<title>'") if parsed.nil?
+    parsed[:feature]
+  end
+
+  def build_pr_command
+    command = ["gh", "pr", "create", "-B", DEFAULT_BASE_BRANCH]
+    command += ["--label", @label] if @label
+    command += ["--reviewer", @reviewers.join(",")] if @reviewers.any?
+    command += ["--assignee", "@me"]
+    command + ARGV
+  end
+end
+
+GitHubPRCreator.create
